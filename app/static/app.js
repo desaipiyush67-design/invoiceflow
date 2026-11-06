@@ -11,7 +11,7 @@ const SAMPLE_INFO = {
   "01": ["happy", "Clean invoice, PO matches", "Apex · paper & toner"],
   "02": ["edge", "Duplicate in disguise", "Apex · re-formatted invoice no."],
   "03": ["edge", "Split PO goes over budget", "BlueLine · 2nd part-bill"],
-  "04": ["edge", "Scanned, no PO number", "Delta · OCR + PO inference"],
+  "04": ["edge", "Scanned, no PO number", "Delta · AI reads a scan, infers PO"],
   "05": ["edge", "Tax ID & bank changed", "Cobalt · impersonation risk"],
   "06": ["extra", "Slightly over PO", "Cobalt · inside tolerance"],
   "07": ["extra", "Blocked vendor", "Evergreen · failed KYC"],
@@ -96,13 +96,20 @@ function renderStage(key, s) {
   $(".stage-title small", el).textContent = s.summary || META.stages.find((x) => x.key === key).hint;
   $(".ms", el).textContent = s.ms != null ? s.ms + " ms" : "";
   if (s.data) $(".stage-body", el).innerHTML = stageBody(key, s.data);
-  if (["warn", "fail"].includes(s.status) && key !== "decide") el.classList.add("open");
+  if (key === "review" && s.data) el.classList.add("open");
 }
 
 function stageBody(key, d) {
-  if (key === "read") return `<dl class="kv"><dt>Method</dt><dd>${d.method === "ocr" ? "OCR on scanned image" : "PDF text layer"}</dd><dt>Pages</dt><dd>${d.pages}</dd>
-      ${d.ocr_confidence != null ? `<dt>OCR confidence</dt><dd>${Math.round(d.ocr_confidence * 100)}%</dd>` : ""}</dl>
-      ${(d.notes || []).map((n) => `<div class="note">${esc(n)}</div>`).join("")}<pre class="raw">${esc(d.text)}</pre>`;
+  if (key === "read") return `<dl class="kv"><dt>Type</dt><dd>${{ "digital-pdf": "Digital PDF (has a text layer)", "scanned-pdf": "Scanned PDF (image only)", image: "Image" }[d.kind]}</dd><dt>Pages</dt><dd>${d.pages}</dd></dl>
+      ${(d.notes || []).map((n) => `<div class="note">${esc(n)}</div>`).join("")}${d.text ? `<pre class="raw">${esc(d.text)}</pre>` : ""}`;
+  if (key === "records") return `<dl class="kv"><dt>Vendor master</dt><dd>${d.counts.vendor_master} vendors</dd><dt>Purchase orders</dt><dd>${d.counts.purchase_orders} POs, with amount already billed</dd><dt>Invoice history</dt><dd>${d.counts.earlier_invoices} approved / held invoices</dd></dl>
+      <p class="muted" style="margin-top:8px;font-size:12px">These records and the AP policy go to the AI reviewer with the extracted invoice.</p>`;
+  if (key === "review") {
+    const groups = {};
+    d.checks.forEach((c) => (groups[c.group || "Other"] ||= []).push(c));
+    return `<p class="muted" style="font-size:12px;margin-bottom:8px">Reviewed by ${esc(d.model)} against the AP policy</p>` + Object.entries(groups).map(([g, cs]) =>
+      `<div class="group-title">${esc(g)}</div><ul class="checks">${cs.map((c) => `<li><span class="ic ${c.status}">${{ pass: "✓", warn: "!", fail: "✕", info: "i" }[c.status]}</span><div><b>${esc(c.title)}</b>${esc(c.detail)}</div></li>`).join("")}</ul>`).join("");
+  }
   if (key === "extract") {
     const f = d.fields, val = (v, fmt) => (v == null || v === "" ? '<span class="missing">not on invoice</span>' : esc(fmt ? fmt(v) : v));
     return `<dl class="kv"><dt>Extractor</dt><dd>${esc(d.extractor)}</dd><dt>Vendor</dt><dd>${val(f.vendor_name)}</dd><dt>GSTIN</dt><dd class="mono">${val(f.vendor_gstin)}</dd>
@@ -118,7 +125,7 @@ function stageBody(key, d) {
 
 function renderDone(run) {
   $("#run-time").textContent = run.duration_ms != null ? `${(run.duration_ms / 1000).toFixed(2)} s end to end` : "";
-  if (run.status === "error") { $("#run-title").textContent = "Could not process this file"; decisionCard({ decision: "REJECT", headline: "Processing error", reasons: [run.error], next_action: "Check the file is a readable invoice and try again.", owner: "AP team" }); return; }
+  if (run.status === "error") { $("#run-title").textContent = "Could not process this file"; decisionCard({ decision: "ERROR", headline: "Nothing was decided", reasons: [run.error], next_action: "Fix the problem above and run the invoice again. No payment decision was recorded.", owner: "AP team" }); return; }
   $("#run-title").textContent = `${run.vendor || "Unknown vendor"} · ${run.invoice_number || "no invoice no."} · ${inr(run.total)}`;
   decisionCard(run.result);
 }
@@ -126,7 +133,7 @@ function renderDone(run) {
 function decisionCard(r) {
   const el = $("#decision");
   el.className = "decision " + r.decision; el.hidden = false;
-  el.innerHTML = `<div class="big">${{ APPROVE: "APPROVED", HOLD: "ON HOLD", REJECT: "REJECTED" }[r.decision] || r.decision}</div><h3>${esc(r.headline)}</h3>
+  el.innerHTML = `<div class="big">${{ APPROVE: "APPROVED", HOLD: "ON HOLD", REJECT: "REJECTED", ERROR: "COULD NOT PROCESS" }[r.decision] || r.decision}</div><h3>${esc(r.headline)}</h3>
     ${r.explanation ? `<p style="font-size:13px;margin-bottom:8px">${esc(r.explanation)}</p>` : ""}
     <ul>${r.reasons.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>
     <div class="action"><b>Next step · ${esc(r.owner)}</b>${esc(r.next_action)}</div>
@@ -178,8 +185,8 @@ function renderRuns() {
 
 // ---------- reference ----------
 async function loadReference() {
-  const d = await api("/api/reference"), s = META.settings;
-  $("#settings").textContent = `Tolerance: ${s.tolerance_pct}% or ${inr(s.tolerance_abs)} (whichever is lower) · unit price ±${s.unit_price_tolerance_pct}% · GST ${s.gst_rate}%`;
+  const d = await api("/api/reference");
+  $("#policy").textContent = META.policy;
   $("#pos").innerHTML = `<tr><th>PO</th><th>Vendor</th><th>Description</th><th class="r">Amount (pre-tax)</th><th>Billed so far</th><th>Status</th></tr>` + d.purchase_orders.map((p) => {
     const pct = Math.min(100, (100 * p.billed) / p.subtotal);
     return `<tr><td class="mono">${p.po_number}</td><td>${esc(p.vendor_id)}</td><td>${esc(p.description)}<span class="headline">${p.lines.map((l) => `${l.qty} × ${esc(l.item)} @ ${inr(l.unit_price)}`).join(" · ")}</span></td>

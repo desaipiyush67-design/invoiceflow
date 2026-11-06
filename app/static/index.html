@@ -16,7 +16,7 @@
     <nav>
       <a href="#/process" data-view="process"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Process invoice</a>
       <a href="#/dashboard" data-view="dashboard"><svg viewBox="0 0 24 24"><path d="M4 13h6V4H4zM14 20h6v-9h-6zM4 20h6v-3H4zM14 8h6V4h-6z"/></svg>Dashboard</a>
-      <a href="#/reference" data-view="reference"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h10"/></svg>Vendors &amp; POs</a>
+      <a href="#/reference" data-view="reference"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h10"/></svg>Policy &amp; data</a>
     </nav>
     <div class="side-foot">
       <div class="engine" id="engine">Extractor: …</div>
@@ -28,7 +28,7 @@
     <!-- PROCESS -->
     <section id="view-process" class="view">
       <header class="page-head">
-        <div><h1>Process an invoice</h1><p>Drop a vendor invoice (PDF or scan). Every step runs live and explains itself.</p></div>
+        <div><h1>Process an invoice</h1><p>Drop a vendor invoice (PDF, scan or photo). AI reads it, reviews it against the AP policy and decides, with every step visible.</p></div>
       </header>
 
       <div class="intake" id="intake">
@@ -84,8 +84,9 @@
 
     <!-- REFERENCE -->
     <section id="view-reference" class="view" hidden>
-      <header class="page-head"><div><h1>Vendors &amp; purchase orders</h1><p>The master data every invoice is checked against.</p></div></header>
-      <div class="card"><div class="card-head"><b>Purchase orders</b><span class="muted" id="settings"></span></div><div class="table-wrap"><table id="pos"></table></div></div>
+      <header class="page-head"><div><h1>Policy, vendors &amp; purchase orders</h1><p>What the AI reviewer checks every invoice against.</p></div></header>
+      <div class="card"><div class="card-head"><b>AP policy</b><span class="muted">plain English; the AI reviewer applies it to every invoice</span></div><pre class="policy" id="policy"></pre></div>
+      <div class="card"><div class="card-head"><b>Purchase orders</b></div><div class="table-wrap"><table id="pos"></table></div></div>
       <div class="card"><div class="card-head"><b>Vendor master</b></div><div class="table-wrap"><table id="vendors"></table></div></div>
       <div class="card"><div class="card-head"><b>Invoice ledger</b><span class="muted">approved and held invoices, used for duplicate and PO-balance checks</span></div><div class="table-wrap"><table id="ledger"></table></div></div>
     </section>

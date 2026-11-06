@@ -8,19 +8,16 @@ from datetime import datetime
 from pathlib import Path
 from typing import Callable
 
-from . import store
-from .decide import decide
+from . import config, review, store
 from .extract import extract
+from .models import Decision
 from .reader import read_document
-from .rules import document_checks, duplicate_checks, match_vendor, po_checks
 
 STAGES = [
-    ("read", "Read document", "Text layer or OCR"),
-    ("extract", "Extract fields", "Vendor, numbers, lines"),
-    ("validate", "Validate invoice", "Required fields, maths, GST"),
-    ("vendor", "Verify vendor", "Master data, tax ID, bank"),
-    ("match", "Match PO & history", "Duplicates, PO, tolerances"),
-    ("decide", "Decide", "Approve / Hold / Reject"),
+    ("read", "Prepare document", "Pages to images, text layer"),
+    ("extract", "AI reads invoice", "Vision model extracts every field"),
+    ("records", "Look up company records", "Vendor master, POs, invoice history"),
+    ("review", "AI reviews & decides", "Policy check: document, vendor, duplicates, PO"),
 ]
 
 
@@ -49,48 +46,41 @@ def execute(run: dict, emit: Callable[[dict], None]) -> dict:
 
     path = Path(run["file_path"])
     try:
+        if not config.GROQ_API_KEY:
+            raise RuntimeError("GROQ_API_KEY is not set. Add it to .env (local) or the host's environment variables.")
         doc, ms = timed("read", lambda: read_document(path))
         run["sha256"] = doc.sha256
-        stage("read", "done", f"{'OCR (scanned image)' if doc.method == 'ocr' else 'Digital PDF text layer'} · {doc.pages} page(s)"
-              + (f" · OCR confidence {doc.ocr_confidence:.0%}" if doc.ocr_confidence is not None else ""),
-              {"method": doc.method, "pages": doc.pages, "ocr_confidence": doc.ocr_confidence, "notes": doc.notes, "text": doc.text[:4000]}, ms)
+        kind = {"digital-pdf": "Digital PDF", "scanned-pdf": "Scanned PDF (image only)", "image": "Image"}[doc.kind]
+        stage("read", "done", f"{kind} · {doc.pages} page(s)", {"kind": doc.kind, "pages": doc.pages, "notes": doc.notes, "text": doc.text[:4000]}, ms)
 
-        (fields, extractor, notes), ms = timed("extract", lambda: extract(doc.text))
+        fields, ms = timed("extract", lambda: extract(doc))
         found = sum(1 for k in ("vendor_name", "vendor_gstin", "invoice_number", "invoice_date", "po_reference", "subtotal", "tax_amount", "total") if getattr(fields, k))
-        stage("extract", "done", f"{extractor} · {found}/8 key fields · {len(fields.line_items)} line item(s)",
-              {"extractor": extractor, "fields": fields.model_dump(), "notes": notes}, ms)
+        stage("extract", "done", f"{found}/8 key fields · {len(fields.line_items)} line item(s)",
+              {"extractor": f"AI vision · {config.VISION_MODEL}", "fields": fields.model_dump(), "notes": []}, ms)
 
-        checks = []
-        doc_checks, ms = timed("validate", lambda: document_checks(fields))
-        checks += doc_checks
-        stage("validate", _worst(doc_checks), _summary(doc_checks), [c.model_dump() for c in doc_checks], ms)
+        records, ms = timed("records", lambda: review.gather_records(fields))
+        stage("records", "done", f"{len(records['vendor_master'])} vendors · {len(records['purchase_orders'])} POs · {len(records['earlier_invoices'])} earlier invoices",
+              {"counts": {k: len(v) for k, v in records.items()}}, ms)
 
-        (vendor, v_checks), ms = timed("vendor", lambda: match_vendor(fields))
-        checks += v_checks
-        stage("vendor", _worst(v_checks), vendor["name"] if vendor else "Unknown vendor", [c.model_dump() for c in v_checks], ms)
-
-        def match():
-            d = duplicate_checks(fields, vendor, doc.sha256)
-            po, p = po_checks(fields, vendor)
-            return po, d + p
-        (po, m_checks), ms = timed("match", match)
-        checks += m_checks
-        stage("match", _worst(m_checks), po["po_number"] if po else "No PO matched", [c.model_dump() for c in m_checks], ms)
-
-        decision, ms = timed("decide", lambda: decide(fields, vendor, po, checks))
+        (vendor, po, model, result), ms = timed("review", lambda: review.review(fields, records))
+        decision = Decision(**{k: getattr(result, k) for k in Decision.model_fields})
         status = {"APPROVE": "approved", "HOLD": "held", "REJECT": "rejected"}[decision.decision]
         if vendor and decision.decision != "REJECT":
             store.record_invoice(vendor["vendor_id"], fields, po["po_number"] if po else None, status, doc.sha256, run["id"])
-        stage("decide", {"APPROVE": "pass", "HOLD": "warn", "REJECT": "fail"}[decision.decision], decision.headline, decision.model_dump(), ms)
+        checks = [c.model_dump() for c in result.checks]
+        stage("review", {"APPROVE": "pass", "HOLD": "warn", "REJECT": "fail"}[decision.decision], decision.headline,
+              {"model": model, "checks": checks}, ms)
 
         run.update(status="done", decision=decision.decision, vendor=vendor["name"] if vendor else fields.vendor_name,
                    invoice_number=fields.invoice_number, po_number=po["po_number"] if po else None, total=fields.total,
-                   fields=fields.model_dump(), checks=[c.model_dump() for c in checks], result=decision.model_dump(), extractor=extractor)
-    except Exception as e:  # a broken file must still end the run cleanly, with the reason visible
-        run.update(status="error", decision="ERROR", error=f"{type(e).__name__}: {e}", trace=traceback.format_exc()[-2000:])
+                   fields=fields.model_dump(), checks=checks, result=decision.model_dump(),
+                   extractor=f"AI · {config.VISION_MODEL} + {model}")
+    except Exception as e:  # a broken file or an AI outage must still end the run cleanly, with the reason visible
+        message = str(e) if type(e).__name__ in ("UsageLimit", "RuntimeError") else f"{type(e).__name__}: {e}"
+        run.update(status="error", decision="ERROR", error=message, trace=traceback.format_exc()[-2000:])
         for k, s in run["stages"].items():
             if s["status"] in ("pending", "running"):
-                stage(k, "error" if s["status"] == "running" else "skipped", str(e) if s["status"] == "running" else "")
+                stage(k, "error" if s["status"] == "running" else "skipped", str(e)[:300] if s["status"] == "running" else "")
     run["duration_ms"] = round((time.perf_counter() - t0) * 1000)
     record = {k: v for k, v in run.items() if k != "events"}  # the event log is only for the live stream
     store.save_run(record)
@@ -98,11 +88,3 @@ def execute(run: dict, emit: Callable[[dict], None]) -> dict:
     return run
 
 
-def _worst(checks) -> str:
-    st = [c.status for c in checks]
-    return "fail" if "fail" in st else "warn" if "warn" in st else "pass"
-
-
-def _summary(checks) -> str:
-    bad = [c for c in checks if c.status in ("fail", "warn")]
-    return f"{len(checks) - len(bad)}/{len(checks)} passed" + (f" · {bad[0].title}" if bad else "")

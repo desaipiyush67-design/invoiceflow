@@ -1,4 +1,4 @@
-"""Data shapes shared by every stage of the pipeline."""
+"""Data shapes shared by every stage. The AI's replies are validated against these."""
 from __future__ import annotations
 
 from typing import Literal, Optional
@@ -14,42 +14,42 @@ class LineItem(BaseModel):
 
 
 class InvoiceFields(BaseModel):
-    """What we pull out of an invoice. Anything not printed on the invoice stays None (never guessed)."""
+    """What the AI reads off the invoice. Anything not printed on the invoice stays null (never guessed)."""
     vendor_name: Optional[str] = None
     vendor_gstin: Optional[str] = None
     invoice_number: Optional[str] = None
     invoice_date: Optional[str] = Field(None, description="ISO date YYYY-MM-DD")
-    po_reference: Optional[str] = Field(None, description="Purchase order number exactly as printed, e.g. PO-4501")
+    po_reference: Optional[str] = None
     currency: Optional[str] = "INR"
     line_items: list[LineItem] = []
-    subtotal: Optional[float] = Field(None, description="Total before tax")
-    tax_amount: Optional[float] = Field(None, description="Sum of all GST components (CGST+SGST or IGST)")
-    total: Optional[float] = Field(None, description="Grand total payable")
+    subtotal: Optional[float] = None
+    tax_amount: Optional[float] = None
+    total: Optional[float] = None
     bank_account_last4: Optional[str] = None
 
 
-Status = Literal["pass", "warn", "fail", "info"]
-Severity = Literal["none", "review", "block"]
-
-
 class Check(BaseModel):
-    """One rule result. severity says what it does to the decision: block -> reject, review -> hold."""
+    """One finding. severity says what it does to the decision: block -> reject, review -> hold."""
     id: str
-    group: str
+    group: str = ""
     title: str
-    status: Status
-    severity: Severity = "none"
+    status: Literal["pass", "warn", "fail", "info"]
+    severity: Literal["none", "review", "block"] = "none"
     detail: str
 
 
-DecisionType = Literal["APPROVE", "HOLD", "REJECT"]
-
-
 class Decision(BaseModel):
-    decision: DecisionType
+    decision: Literal["APPROVE", "HOLD", "REJECT"]
     headline: str
     reasons: list[str]
     next_action: str
     owner: str
     vendor_email: Optional[str] = None
     explanation: str = ""
+
+
+class Review(Decision):
+    """The reviewer's single reply: what it matched, every finding, and the decision."""
+    vendor_id: Optional[str] = None
+    po_number: Optional[str] = None
+    checks: list[Check]

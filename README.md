@@ -1,74 +1,69 @@
-# InvoiceFlow — from invoice PDF to a reasoned payment decision
+# InvoiceFlow — AI accounts-payable reviewer
 
-InvoiceFlow takes a vendor invoice (a digital PDF, a scan or a photo) and decides **Approve**, **Hold** or **Reject**, showing every step it took and why. Anything that isn't approved goes to a named owner with the exact next step, and when the vendor has to fix something, a ready-to-send email is drafted.
+InvoiceFlow takes a vendor invoice (a digital PDF, a scan or a photo) and an AI reviewer decides **Approve**, **Hold** or **Reject**, the way a senior AP clerk would: it reads the invoice, checks it against the company's AP policy, vendor master, purchase orders and invoice history, and explains every finding. Anything not approved goes to a named owner with the exact next step; when the vendor has to fix something, the email is drafted.
 
 Built for the Zamp AI Solutions Associate case study (PS-1, Finance / AP).
 
-## What it does
+## How it works
 
 ```
-Invoice ──► 1 Read ──► 2 Extract ──► 3 Validate ──► 4 Verify vendor ──► 5 Match PO & history ──► 6 Decide
-            text layer   vendor, no.,   required fields,  vendor master,     duplicates, PO, split     APPROVE / HOLD / REJECT
-            or OCR       date, PO,      maths, GST rate,  tax ID, bank,      billing, tolerance,       + reason, owner, next step
-                         lines, totals  invoice date      vendor status      line prices & qty         + vendor email if needed
+Invoice ──► 1 Prepare ──► 2 AI reads invoice ──► 3 Look up records ──► 4 AI reviews & decides
+            pages to       vision model reads     vendor master, POs     reasoning model applies the AP policy:
+            images +       every field, even      (+ amount already      document, vendor, duplicates, PO, split billing
+            text layer     from scans             billed), history       → APPROVE / HOLD / REJECT + owner + next step
 ```
 
-- **Live run view**: each stage lights up as it runs, with its result and timing; click a stage for the detail (raw text, extracted fields, every check).
-- **Dashboard**: all runs with decision, amount, next owner and processing time, plus totals (straight-through rate, value approved, value stopped).
-- **Vendors & POs**: the master data being checked against, including how much of each PO is already billed.
-
-## Decision policy
-
-| Outcome | When | Example |
+| Step | Model | What it does |
 |---|---|---|
-| **REJECT** | It can never be paid as submitted | duplicate invoice, blocked vendor, PO issued to another vendor |
-| **HOLD** | It may be payable, but a person must act | inferred PO, over the PO budget, tax ID or bank changed, missing invoice number, wrong GST |
-| **APPROVE** | Every check passes (small variances inside tolerance are noted) | clean invoice, or 1.25% over PO with a note |
+| AI reads invoice | `qwen/qwen3.8-27b` (vision) | Reads the page image (and the text layer when there is one) and returns the vendor, GSTIN, invoice number, date, PO, line items, subtotal, tax, total and bank account. Told never to guess a field that isn't printed. |
+| AI reviews & decides | `openai/gpt-oss-120b` (reasoning) | Gets the extracted invoice, the company records and the **AP policy written in plain English** ([`data/ap_policy.md`](data/ap_policy.md)), and returns every finding plus the decision, owner, next step and vendor email. |
 
-Tolerances live in [`app/config.py`](app/config.py): over-billing up to **2% or ₹5,000, whichever is lower**; unit price drift ±2%; GST 18%.
+The policy is the control panel: edit the text (for example change the 2% tolerance to 5%) and the reviewer's behaviour changes, with no code change. Every AI reply is validated against a schema and re-asked once if malformed. If the main model hits a usage limit, a backup model takes over; if both are unavailable, the run stops with a clear message and **no decision is recorded**.
 
-## Test invoices (in `samples/`)
+### UI
+- **Live run view**: each step lights up as it runs, with timing; open a step to see the extracted fields and the reviewer's findings grouped by Document, Vendor, Duplicates and Purchase order.
+- **Dashboard**: every run with decision, amount, next owner and time, plus the straight-through rate, value approved and value stopped.
+- **Policy & data**: the AP policy the AI applies, the purchase orders (with how much is already billed), the vendor master and the invoice ledger.
+
+## Test invoices (`samples/`)
 
 | # | Case | Expected |
 |---|---|---|
 | 01 | Clean invoice, PO matches line by line | APPROVE |
-| 02 | **Duplicate in disguise**: an invoice already paid, re-sent with its number re-formatted (`INV/2026/417` vs `INV-2026-0417`) | REJECT |
-| 03 | **Split PO overrun**: second part-bill against a ₹50,000 PO takes the total to ₹53,000 (6% over) | HOLD → buyer |
-| 04 | **Scanned invoice with no PO number**: OCR, then the PO is inferred from the vendor's open POs | HOLD → requester confirms |
+| 02 | **Duplicate in disguise**: an already-paid invoice re-sent with its number re-formatted (`INV/2026/417` vs `INV-2026-0417`) | REJECT |
+| 03 | **Split PO overrun**: second part-bill takes a ₹50,000 PO to ₹53,000 | HOLD → buyer |
+| 04 | **Scanned invoice, no PO number**: the AI reads the image and infers PO-4504, but a person must confirm | HOLD → requester |
 | 05 | **Tax ID and bank account changed** ("please pay our new account") | HOLD → AP lead verifies by phone |
 | 06 | 1.25% over the PO | APPROVE with a note |
 | 07 | Vendor blocked after failed KYC | REJECT |
-| 08 | No invoice number, GST charged at 12% | HOLD + email to vendor |
+| 08 | No invoice number, GST charged at 12% | HOLD + email to the vendor |
 
-Each prepared case can be run from the UI with one click. **Reset demo data** restores the starting ledger, so the demo is repeatable.
+One click runs each case from the UI. **Reset demo data** restores the starting ledger, so the demo is repeatable.
 
 ## Run it
 
 ```bash
 python -m venv .venv
-.venv\Scripts\activate            # macOS/Linux: source .venv/bin/activate
+.venv\Scripts\activate             # macOS/Linux: source .venv/bin/activate
 pip install -r requirements-dev.txt
-uvicorn app.main:app --reload     # open http://127.0.0.1:8000
-pytest                            # 18 tests: every sample's decision and reasons
+echo GROQ_API_KEY=your_key > .env  # free key from console.groq.com
+uvicorn app.main:app --reload      # open http://127.0.0.1:8000
+pytest                             # includes 8 live AI tests, one per sample
 ```
 
-Regenerate the sample invoices with `python tools/make_samples.py`; print every decision with `python tools/run_all.py`.
+`python tools/run_all.py` prints every sample's decision; `python tools/make_samples.py` regenerates the sample invoices.
+
+Deploy: `render.yaml` + `Dockerfile` (Render free web service); set `GROQ_API_KEY` in the Render dashboard.
 
 ## Design choices
-
-- **Plain rules decide.** The payment decision is deterministic code an auditor can read: the same invoice always gets the same answer, with the reason attached. No external AI service is needed, so it runs offline, costs nothing per invoice, and invoice data never leaves the machine.
-- **Never guess a field.** A value that isn't on the invoice stays empty and becomes a check result ("missing invoice number"), not an invented value.
-- **Held is not consumed.** Only approved invoices count against a PO's budget, so a held invoice never blocks a correct one.
-- **Inferred POs are suggested, never auto-paid.** Even at 100% confidence, a person confirms.
-- **Identity changes are verified out of band.** A changed tax ID or bank account is never confirmed using contact details from the same invoice.
-
-## Stack
-
-Python · FastAPI · Server-Sent Events for the live view · PyMuPDF (text layer) · RapidOCR on ONNX Runtime (scans, CPU only) · RapidFuzz (vendor/item matching) · SQLite (runs and ledger) · plain HTML/CSS/JS front end · Docker (deploys to Render with `render.yaml`).
+- **AI reads and judges; the policy is plain English.** Finance teams can read and change the rules without a developer.
+- **Facts come from the company's records, not the model's memory.** The reviewer only sees the vendor master, POs, billed amounts and invoice history it is given, and is told never to invent data.
+- **Held is not consumed.** Only approved invoices count against a PO's budget.
+- **Inferred POs are suggested, never auto-paid**, and identity changes (GSTIN, bank account) are verified out of band.
+- **Fail safe.** Malformed AI replies are re-asked; usage limits fall back to a second model; if nothing works, no decision is recorded.
 
 ## Assumptions
-
-- Buyer: Northwind Retail Pvt Ltd, Bengaluru; amounts in INR; GST 18%.
-- A PO's amount is compared before tax; tax is checked separately.
+- Buyer: Northwind Retail Pvt Ltd, Bengaluru; INR; GST 18%. PO amounts are compared before tax.
 - Vendor master, POs and the paid-invoice ledger are CSV files in `data/` (in production: the ERP).
-- One invoice per file.
+- One invoice per file; up to 3 pages are read.
+- Free Groq accounts allow roughly 8,000 tokens per minute and 200,000 per day per model, about 40 invoices a day.

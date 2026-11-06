@@ -62,11 +62,10 @@ def init(reset: bool = False) -> None:
             invoice_date TEXT, po_number TEXT, subtotal REAL, tax_amount REAL, total REAL, status TEXT,
             sha256 TEXT, run_id TEXT, recorded_on TEXT)""")
         if con.execute("SELECT COUNT(*) FROM ledger").fetchone()[0] == 0:
-            from .rules import invoice_key
             for r in _csv("ledger_seed.csv"):
                 con.execute(
                     "INSERT INTO ledger (vendor_id, invoice_number, invoice_key, invoice_date, po_number, subtotal, tax_amount, total, status, sha256, run_id, recorded_on) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
-                    (r["vendor_id"], r["invoice_number"], invoice_key(r["invoice_number"]), r["invoice_date"], r["po_number"],
+                    (r["vendor_id"], r["invoice_number"], r["invoice_number"], r["invoice_date"], r["po_number"],
                      float(r["subtotal"]), float(r["tax_amount"]), float(r["total"]), r["status"], None, "seed", r["recorded_on"]))
     config.UPLOADS.mkdir(parents=True, exist_ok=True)
 
@@ -90,11 +89,10 @@ def billed_against(po_number: str) -> float:
 
 
 def record_invoice(vendor_id, fields, po_number, status, sha, run_id) -> None:
-    from .rules import invoice_key
     with _lock, connect() as con:
         con.execute(
             "INSERT INTO ledger (vendor_id, invoice_number, invoice_key, invoice_date, po_number, subtotal, tax_amount, total, status, sha256, run_id, recorded_on) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
-            (vendor_id, fields.invoice_number, invoice_key(fields.invoice_number), fields.invoice_date, po_number,
+            (vendor_id, fields.invoice_number, fields.invoice_number, fields.invoice_date, po_number,
              fields.subtotal, fields.tax_amount, fields.total, status, sha, run_id, datetime.now().date().isoformat()))
 
 

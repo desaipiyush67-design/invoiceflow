@@ -34,10 +34,9 @@ def index() -> str:
 
 @app.get("/api/meta")
 def meta() -> dict:
-    return {"stages": [{"key": k, "title": t, "hint": h} for k, t, h in STAGES], "extractor": "Built-in parser",
+    return {"stages": [{"key": k, "title": t, "hint": h} for k, t, h in STAGES], "extractor": f"AI · {config.VISION_MODEL} + {config.REASONING_MODEL}" if config.GROQ_API_KEY else "AI key missing (set GROQ_API_KEY)",
             "samples": sorted(p.name for p in config.SAMPLES.glob("*.pdf")),
-            "settings": {"tolerance_pct": config.TOLERANCE_PCT, "tolerance_abs": config.TOLERANCE_ABS, "gst_rate": config.GST_RATE,
-                         "unit_price_tolerance_pct": config.UNIT_PRICE_TOLERANCE_PCT, "near_duplicate_days": config.NEAR_DUPLICATE_DAYS}}
+            "policy": config.POLICY_PATH.read_text(encoding="utf-8")}
 
 
 def _start(filename: str, path: Path) -> dict:

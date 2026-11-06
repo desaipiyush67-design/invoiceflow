@@ -4,3 +4,6 @@ services:
     runtime: docker
     plan: free
     healthCheckPath: /api/meta
+    envVars:
+      - key: GROQ_API_KEY   # set in the Render dashboard; never commit it
+        sync: false
