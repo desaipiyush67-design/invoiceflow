@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import time
 import re
 from typing import TypeVar
 
@@ -34,16 +35,33 @@ class UsageLimit(RuntimeError):
     """The AI provider refused because a usage limit was reached."""
 
 
+def _wait_seconds(error: Exception) -> float | None:
+    """Groq says how long to wait ("try again in 1m2.5s"). None if it doesn't say."""
+    m = re.search(r"try again in (?:(\d+)h)?(?:(\d+)m)?(?:([\d.]+)s)?", str(error))
+    if not m or not any(m.groups()):
+        return None
+    h, mins, s = (float(x) if x else 0.0 for x in m.groups())
+    return h * 3600 + mins * 60 + s
+
+
 def ask_with_backup(models: list[str], *args, **kwargs):
-    """Try each model in turn when one has hit its usage limit. Returns (model used, result)."""
+    """Try each model in turn when one has hit its usage limit. Returns (model used, result).
+
+    A per-minute limit (wait of a minute or less) is simply waited out; a longer wait (the daily limit)
+    moves on to the next model, and if every model is limited the run stops with a clear message."""
     from groq import RateLimitError
-    for i, model in enumerate(models):
-        try:
-            return model, ask(model, *args, **kwargs)
-        except RateLimitError as e:
-            if i == len(models) - 1:
-                m = re.search(r"try again in ([\dhms.]+)", str(e))
-                raise UsageLimit("The AI service's free usage limit is reached" + (f"; try again in about {m.group(1).split('.')[0]}s." if m else ".")) from None
+    wait = None
+    for model in models:
+        for _ in range(3):
+            try:
+                return model, ask(model, *args, **kwargs)
+            except RateLimitError as e:
+                wait = _wait_seconds(e)
+                if wait is None or wait > 65:
+                    break
+                time.sleep(wait + 1)
+    hint = f"; try again in about {int(wait // 60)}m{int(wait % 60)}s" if wait else ""
+    raise UsageLimit(f"The AI service's free usage limit is reached{hint}.")
 
 
 def _effort_for(model: str, effort: str) -> str:
