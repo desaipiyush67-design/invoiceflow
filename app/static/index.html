@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>InvoiceFlow</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%233b82f6'/%3E%3Ctext x='16' y='21' font-size='13' font-family='Arial' font-weight='700' fill='white' text-anchor='middle'%3EIF%3C/text%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<div class="shell">
+  <aside class="side">
+    <div class="brand"><span class="logo">IF</span><div><b>InvoiceFlow</b><small>AP automation</small></div></div>
+    <nav>
+      <a href="#/process" data-view="process"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Process invoice</a>
+      <a href="#/dashboard" data-view="dashboard"><svg viewBox="0 0 24 24"><path d="M4 13h6V4H4zM14 20h6v-9h-6zM4 20h6v-3H4zM14 8h6V4h-6z"/></svg>Dashboard</a>
+      <a href="#/reference" data-view="reference"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h10"/></svg>Vendors &amp; POs</a>
+    </nav>
+    <div class="side-foot">
+      <div class="engine" id="engine">Extractor: …</div>
+      <button class="ghost" id="reset">Reset demo data</button>
+    </div>
+  </aside>
+
+  <main>
+    <!-- PROCESS -->
+    <section id="view-process" class="view">
+      <header class="page-head">
+        <div><h1>Process an invoice</h1><p>Drop a vendor invoice (PDF or scan). Every step runs live and explains itself.</p></div>
+      </header>
+
+      <div class="intake" id="intake">
+        <label class="drop" id="drop">
+          <input type="file" id="file" accept=".pdf,.png,.jpg,.jpeg" hidden>
+          <svg viewBox="0 0 24 24"><path d="M12 16V4M7 9l5-5 5 5M4 20h16"/></svg>
+          <b>Drop invoice here</b><span>or click to browse · PDF, PNG, JPG · max 15 MB</span>
+        </label>
+        <div class="samples">
+          <div class="label">Or run a prepared test case</div>
+          <div id="sample-list" class="sample-list"></div>
+        </div>
+      </div>
+
+      <div class="run" id="run" hidden>
+        <div class="run-head">
+          <div><span class="muted" id="run-file"></span><h2 id="run-title">Processing…</h2></div>
+          <div class="run-meta"><span id="run-time" class="mono"></span><button class="ghost" id="new-run">New invoice</button></div>
+        </div>
+        <div class="run-grid">
+          <div class="col">
+            <ol class="timeline" id="timeline"></ol>
+          </div>
+          <div class="col">
+            <div class="decision" id="decision" hidden></div>
+            <div class="card">
+              <div class="card-head"><b>Document</b><a id="open-file" target="_blank" class="link">Open ↗</a></div>
+              <iframe id="preview" title="Invoice preview"></iframe>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- DASHBOARD -->
+    <section id="view-dashboard" class="view" hidden>
+      <header class="page-head"><div><h1>Dashboard</h1><p>Every invoice processed, its decision, and who needs to act.</p></div></header>
+      <div class="kpis" id="kpis"></div>
+      <div class="card">
+        <div class="table-tools">
+          <div class="chips" id="filters">
+            <button data-f="ALL" class="chip on">All</button><button data-f="APPROVE" class="chip">Approved</button>
+            <button data-f="HOLD" class="chip">On hold</button><button data-f="REJECT" class="chip">Rejected</button>
+          </div>
+          <input id="search" placeholder="Search vendor, invoice, PO…">
+        </div>
+        <div class="table-wrap"><table id="runs"><thead><tr>
+          <th>When</th><th>Vendor</th><th>Invoice</th><th>PO</th><th class="r">Amount</th><th>Decision</th><th>Next owner</th><th class="r">Time</th>
+        </tr></thead><tbody></tbody></table></div>
+        <div class="empty" id="runs-empty" hidden>No invoices yet. Process one to see it here.</div>
+      </div>
+    </section>
+
+    <!-- REFERENCE -->
+    <section id="view-reference" class="view" hidden>
+      <header class="page-head"><div><h1>Vendors &amp; purchase orders</h1><p>The master data every invoice is checked against.</p></div></header>
+      <div class="card"><div class="card-head"><b>Purchase orders</b><span class="muted" id="settings"></span></div><div class="table-wrap"><table id="pos"></table></div></div>
+      <div class="card"><div class="card-head"><b>Vendor master</b></div><div class="table-wrap"><table id="vendors"></table></div></div>
+      <div class="card"><div class="card-head"><b>Invoice ledger</b><span class="muted">approved and held invoices, used for duplicate and PO-balance checks</span></div><div class="table-wrap"><table id="ledger"></table></div></div>
+    </section>
+  </main>
+</div>
+<script src="/static/app.js"></script>
+</body>
+</html>

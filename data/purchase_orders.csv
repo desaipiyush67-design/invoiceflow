@@ -1,0 +1,9 @@
+po_number,vendor_id,issued_on,description,subtotal,tax_rate,total,status
+PO-4499,V004,2026-07-02,Shipping cartons (Q2),18000,18,21240,closed
+PO-4501,V001,2026-10-06,Paper and toner for Q4,77000,18,90860,open
+PO-4502,V002,2026-10-01,Inbound freight October (billed in parts),50000,18,59000,open
+PO-4503,V003,2026-09-22,Laptop setup and annual maintenance,85000,18,100300,open
+PO-4504,V004,2026-10-12,Corrugated boxes and packing tape,45500,18,53690,open
+PO-4505,V001,2026-09-18,Office chairs,45000,18,53100,open
+PO-4506,V003,2026-10-15,Cloud migration support,120000,18,141600,open
+PO-4507,V005,2026-08-30,Housekeeping services,60000,18,70800,open

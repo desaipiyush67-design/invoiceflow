@@ -1,0 +1,6 @@
+vendor_id,name,aliases,gstin,state,status,status_reason,bank_last4,payment_terms_days,contact_email
+V001,Apex Office Supplies Pvt Ltd,Apex Office Supplies|Apex Office,29AAPCA1111K1Z2,Karnataka,approved,,4417,30,accounts@apexoffice.example
+V002,BlueLine Logistics LLP,BlueLine Logistics|Blue Line Logistics,29AAKFB2222L1Z8,Karnataka,approved,,9032,45,billing@blueline.example
+V003,Cobalt IT Services Pvt Ltd,Cobalt IT Services|Cobalt IT,27AABCC3333M1Z1,Maharashtra,approved,,1185,30,ar@cobaltit.example
+V004,Delta Packaging Co,Delta Packaging|Delta Packaging Company,29AAGFD4444N1Z4,Karnataka,approved,,7720,30,accounts@deltapack.example
+V005,Evergreen Facility Services,Evergreen Facilities|Evergreen Facility,29AAJFE5555P1Z9,Karnataka,blocked,Failed KYC re-verification on 2026-09-14,3051,30,finance@evergreenfs.example
