@@ -25,6 +25,3 @@ MAX_INVOICE_AGE_DAYS = 180
 NEAR_DUPLICATE_DAYS = 10
 # Inferring a PO when none is printed: below this score we don't suggest one at all.
 PO_INFERENCE_MIN_SCORE = 0.6
-
-CLAUDE_MODEL = os.getenv("INVOICEFLOW_MODEL", "claude-opus-5-5")
-USE_CLAUDE = os.getenv("INVOICEFLOW_USE_CLAUDE", "auto")  # auto = use it when an API key is present

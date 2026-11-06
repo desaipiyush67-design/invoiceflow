@@ -12,7 +12,6 @@ from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import config, store
-from .extract import claude_available
 from .pipeline import STAGES, execute, new_run
 
 app = FastAPI(title="InvoiceFlow", description="Invoice to decision, with every step visible.")
@@ -35,7 +34,7 @@ def index() -> str:
 
 @app.get("/api/meta")
 def meta() -> dict:
-    return {"stages": [{"key": k, "title": t, "hint": h} for k, t, h in STAGES], "extractor": f"Claude ({config.CLAUDE_MODEL})" if claude_available() else "Built-in parser",
+    return {"stages": [{"key": k, "title": t, "hint": h} for k, t, h in STAGES], "extractor": "Built-in parser",
             "samples": sorted(p.name for p in config.SAMPLES.glob("*.pdf")),
             "settings": {"tolerance_pct": config.TOLERANCE_PCT, "tolerance_abs": config.TOLERANCE_ABS, "gst_rate": config.GST_RATE,
                          "unit_price_tolerance_pct": config.UNIT_PRICE_TOLERANCE_PCT, "near_duplicate_days": config.NEAR_DUPLICATE_DAYS}}

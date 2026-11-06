@@ -55,7 +55,7 @@ def execute(run: dict, emit: Callable[[dict], None]) -> dict:
               + (f" · OCR confidence {doc.ocr_confidence:.0%}" if doc.ocr_confidence is not None else ""),
               {"method": doc.method, "pages": doc.pages, "ocr_confidence": doc.ocr_confidence, "notes": doc.notes, "text": doc.text[:4000]}, ms)
 
-        (fields, extractor, notes), ms = timed("extract", lambda: extract(path, doc.text))
+        (fields, extractor, notes), ms = timed("extract", lambda: extract(doc.text))
         found = sum(1 for k in ("vendor_name", "vendor_gstin", "invoice_number", "invoice_date", "po_reference", "subtotal", "tax_amount", "total") if getattr(fields, k))
         stage("extract", "done", f"{extractor} · {found}/8 key fields · {len(fields.line_items)} line item(s)",
               {"extractor": extractor, "fields": fields.model_dump(), "notes": notes}, ms)

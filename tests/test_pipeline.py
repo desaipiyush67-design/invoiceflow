@@ -13,7 +13,6 @@ def fresh_db(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "RUNTIME", tmp_path)
     monkeypatch.setattr(config, "UPLOADS", tmp_path / "uploads")
     monkeypatch.setattr(config, "DB_PATH", tmp_path / "test.db")
-    monkeypatch.setattr(config, "USE_CLAUDE", "off")  # tests must not depend on the network
     store.init(reset=True)
 
 

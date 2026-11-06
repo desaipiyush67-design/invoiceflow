@@ -4,6 +4,3 @@ services:
     runtime: docker
     plan: free
     healthCheckPath: /api/meta
-    envVars:
-      - key: ANTHROPIC_API_KEY   # optional: without it the built-in parser is used
-        sync: false

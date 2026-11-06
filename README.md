@@ -52,13 +52,11 @@ uvicorn app.main:app --reload     # open http://127.0.0.1:8000
 pytest                            # 18 tests: every sample's decision and reasons
 ```
 
-Optional: set `ANTHROPIC_API_KEY` to use Claude (`claude-opus-5-5`) for field extraction. Without a key, the built-in parser is used. If Claude is unavailable mid-run, the run falls back to the parser instead of failing.
-
 Regenerate the sample invoices with `python tools/make_samples.py`; print every decision with `python tools/run_all.py`.
 
 ## Design choices
 
-- **Rules decide, AI reads.** Extraction is where invoices are messy, so that's where AI helps. The payment decision is deterministic code that an auditor can read; the same invoice always gets the same answer.
+- **Plain rules decide.** The payment decision is deterministic code an auditor can read: the same invoice always gets the same answer, with the reason attached. No external AI service is needed, so it runs offline, costs nothing per invoice, and invoice data never leaves the machine.
 - **Never guess a field.** A value that isn't on the invoice stays empty and becomes a check result ("missing invoice number"), not an invented value.
 - **Held is not consumed.** Only approved invoices count against a PO's budget, so a held invoice never blocks a correct one.
 - **Inferred POs are suggested, never auto-paid.** Even at 100% confidence, a person confirms.
@@ -66,7 +64,7 @@ Regenerate the sample invoices with `python tools/make_samples.py`; print every 
 
 ## Stack
 
-Python · FastAPI · Server-Sent Events for the live view · PyMuPDF (text layer) · RapidOCR on ONNX Runtime (scans, CPU only) · RapidFuzz (vendor/item matching) · SQLite (runs and ledger) · Claude via the Anthropic SDK (optional) · plain HTML/CSS/JS front end · Docker (deploys to Render with `render.yaml`).
+Python · FastAPI · Server-Sent Events for the live view · PyMuPDF (text layer) · RapidOCR on ONNX Runtime (scans, CPU only) · RapidFuzz (vendor/item matching) · SQLite (runs and ledger) · plain HTML/CSS/JS front end · Docker (deploys to Render with `render.yaml`).
 
 ## Assumptions
 

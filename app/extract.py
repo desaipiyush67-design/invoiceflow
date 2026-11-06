@@ -1,17 +1,11 @@
-"""Pull structured fields out of an invoice.
+"""Pull structured fields out of an invoice's text (text layer or OCR) with label-driven rules.
 
-Two extractors:
-- Claude (when ANTHROPIC_API_KEY is set): reads the PDF itself, handles any layout.
-- A rule-based parser over the text layer / OCR text: no network, used as the fallback and as a cross-check.
-Neither one guesses: a field that is not printed on the invoice comes back empty.
+Nothing is guessed: a field that is not printed on the invoice comes back empty.
 """
 from __future__ import annotations
 
-import base64
-import os
 import re
 from datetime import datetime
-from pathlib import Path
 
 from . import config
 from .models import InvoiceFields, LineItem
@@ -123,57 +117,6 @@ def parse_text(text: str) -> InvoiceFields:
     return f
 
 
-PROMPT = """You are an accounts-payable clerk. Extract the fields of this vendor invoice.
-Rules:
-- Copy values exactly as printed. If a field is not printed on the invoice, leave it null. Never infer or invent.
-- The buyer is {buyer} (GSTIN {buyer_gstin}); vendor_* fields are about the SELLER, not the buyer.
-- invoice_date as YYYY-MM-DD. Indian dates are day-first (05/11/2026 = 5 Nov 2026).
-- po_reference only if a purchase order number is printed. Amounts as plain numbers in rupees.
-- tax_amount = total of all GST components (CGST + SGST, or IGST).
-- bank_account_last4 = last 4 digits of the vendor's bank account if printed."""
-
-
-def claude_available() -> bool:
-    if config.USE_CLAUDE == "off":
-        return False
-    return bool(os.getenv("ANTHROPIC_API_KEY") or os.getenv("ANTHROPIC_AUTH_TOKEN"))
-
-
-def extract_with_claude(path: Path) -> InvoiceFields:
-    import anthropic
-
-    data = base64.standard_b64encode(path.read_bytes()).decode()
-    if path.suffix.lower() == ".pdf":
-        block = {"type": "document", "source": {"type": "base64", "media_type": "application/pdf", "data": data}}
-    else:
-        media = "image/png" if path.suffix.lower() == ".png" else "image/jpeg"
-        block = {"type": "image", "source": {"type": "base64", "media_type": media, "data": data}}
-    client = anthropic.Anthropic()
-    response = client.messages.parse(
-        model=config.CLAUDE_MODEL,
-        max_tokens=16000,
-        output_config={"effort": "low"},
-        messages=[{"role": "user", "content": [block, {"type": "text", "text": PROMPT.format(buyer=config.BUYER_NAME, buyer_gstin=config.BUYER_GSTIN)}]}],
-        output_format=InvoiceFields,
-    )
-    if response.stop_reason == "refusal" or response.parsed_output is None:
-        raise RuntimeError(f"Claude returned no extraction (stop_reason={response.stop_reason})")
-    out = response.parsed_output
-    out.po_reference = normalize_po(out.po_reference)
-    return out
-
-
-def extract(path: Path, text: str) -> tuple[InvoiceFields, str, list[str]]:
+def extract(text: str) -> tuple[InvoiceFields, str, list[str]]:
     """Returns (fields, extractor name, notes)."""
-    notes: list[str] = []
-    rules = parse_text(text)
-    if claude_available():
-        try:
-            fields = extract_with_claude(path)
-            # Cross-check the money: if the two readers disagree on the total, say so (the rules engine re-checks the maths).
-            if rules.total and fields.total and abs(rules.total - fields.total) > 1:
-                notes.append(f"Readers disagree on the total (Claude {fields.total:,.2f} vs text {rules.total:,.2f}).")
-            return fields, f"Claude ({config.CLAUDE_MODEL})", notes
-        except Exception as e:  # network, quota, refusal: fall back rather than fail the run
-            notes.append(f"Claude extraction unavailable ({type(e).__name__}); used the built-in parser.")
-    return rules, "Built-in parser", notes
+    return parse_text(text), "Built-in parser", []
