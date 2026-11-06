@@ -52,14 +52,14 @@ def ask_with_backup(models: list[str], *args, **kwargs):
     from groq import RateLimitError
     wait = None
     for model in models:
-        for _ in range(3):
+        for _ in range(4):
             try:
                 return model, ask(model, *args, **kwargs)
             except RateLimitError as e:
                 wait = _wait_seconds(e)
-                if wait is None or wait > 65:
+                if wait is not None and wait > 65:
                     break
-                time.sleep(wait + 1)
+                time.sleep((wait if wait is not None else 15) + 1)  # no wait time given: short limits clear within seconds
     hint = f"; try again in about {int(wait // 60)}m{int(wait % 60)}s" if wait else ""
     raise UsageLimit(f"The AI service's free usage limit is reached{hint}.")
 
